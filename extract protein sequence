@@ -1,0 +1,50 @@
+from Bio import SeqIO
+import pandas as pd
+from collections import defaultdict
+from Bio.SeqIO import write
+
+# Input files
+fasta_file = "example.fasta"
+excel_file = "example.xlsx"
+output_fasta = "exemple-extract.fasta"
+
+# Read Excel sheet
+df = pd.read_excel(excel_file)
+df = df.rename(columns={df.columns[0]: "ID", df.columns[1]: "FROM", df.columns[2]: "TO"})
+df = df.dropna(subset=["ID", "FROM", "TO"])
+
+# Convert to string and integers
+df["ID"] = df["ID"].astype(str)
+df["FROM"] = df["FROM"].astype(int)
+df["TO"] = df["TO"].astype(int)
+
+# Read FASTA sequences
+records = SeqIO.to_dict(SeqIO.parse(fasta_file, "fasta"))
+
+# Counter for sequence IDs
+id_counter = defaultdict(int)
+
+# Extract fragments
+fragments = []
+for _, row in df.iterrows():
+    prot_id = row["ID"]
+    start = row["FROM"] - 1  # 0-based index
+    end = row["TO"]
+
+    # Match exact ID or by prefix
+    matched_id = next((rid for rid in records if rid.startswith(prot_id)), None)
+    if matched_id:
+        seq_record = records[matched_id]
+        fragment = seq_record[start:end]
+
+        # Increment counter and assign new ID with suffix
+        id_counter[prot_id] += 1
+        suffix = f".{id_counter[prot_id]}"
+        fragment.id = f"{prot_id}{suffix}"
+        fragment.name = fragment.id
+        fragment.description = f"fragment {start+1}-{end}"
+
+        fragments.append(fragment)
+
+# Save results
+write(fragments, output_fasta, "fasta")
